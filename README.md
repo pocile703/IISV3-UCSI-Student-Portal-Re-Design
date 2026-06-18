@@ -151,6 +151,8 @@ Architecture and design decisions are in `docs/`:
 Development history: `Notes/dev-log.md` · `Notes/roadmap.md` · `Notes/bugs.md`
 
 
-**Made by pocile703.**
+**Made by pocile703**
+
 **FOR EDUCATIONAL PURPOSES ONLY**
+
 CREATED USING REFERENCES FROM THE UCSI STUDENT PORTAN (IISV2) AND WITH **AI ASSISTANCE**
