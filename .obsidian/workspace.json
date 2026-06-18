@@ -1,0 +1,291 @@
+{
+  "main": {
+    "id": "7bd6dfe5ef1b6d58",
+    "type": "split",
+    "children": [
+      {
+        "id": "cb6752044247b92e",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "78d702454fd8bd6d",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Notes/roadmap.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "roadmap"
+            }
+          },
+          {
+            "id": "045fcbf2e9d18848",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Notes/bugs.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "bugs"
+            }
+          },
+          {
+            "id": "1900b4ff2ccf62ef",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Notes/roadmap.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "roadmap"
+            }
+          },
+          {
+            "id": "8ed3dfda383df513",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Notes/roadmap.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "roadmap"
+            }
+          },
+          {
+            "id": "25605f8001640601",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "docs/backend-readiness-review.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "backend-readiness-review"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "9aef34c08057d949",
+    "type": "split",
+    "children": [
+      {
+        "id": "fbaf5ca130f910fb",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "7c9ebea7e0545f6a",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "d39dd4dff85d66c6",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "f2402d87761de5e5",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 200
+  },
+  "right": {
+    "id": "328941277dc91bc6",
+    "type": "split",
+    "children": [
+      {
+        "id": "8cb7baabe8f4fd3c",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "c165f9e38819acdd",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "Welcome.md",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks for Welcome"
+            }
+          },
+          {
+            "id": "0ba6e1da231c80ce",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "Welcome.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links from Welcome"
+            }
+          },
+          {
+            "id": "189c1f4b71440e11",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "de747b857fd65f82",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "e0a739156801c0f4",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "Welcome.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline of Welcome"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "78d702454fd8bd6d",
+  "lastOpenFiles": [
+    "docs/superpowers/specs/2026-05-31-admin-programme-crud-design.md",
+    "CC-Session-Logs/02-06-2026-phase6-admin-posts-page-and-theme-fix.md",
+    "app/src/admin-posts-page-regression.test.ts",
+    "app/src/app/(portal)/admin/posts/page.tsx",
+    "app/src/app/(portal)/admin/posts",
+    "app/src/components/admin/AdminPostsTable.tsx",
+    "app/src/services/posts-queries.ts",
+    "app/src/types/admin-posts.ts",
+    "docs/superpowers/plans/2026-05-31-admin-posts-page.md",
+    "docs/superpowers/specs/2026-05-31-admin-posts-page-design.md",
+    "CC-Session-Logs/31-05-2026-21_13-phase6-admin-sections-crud-and-theme-fix.md",
+    "app/src/components/layout/ThemeToggle.tsx.tmp.77224.f18a8ea674e3",
+    "app/public/theme-bootstrap.js",
+    "app/src/admin-section-actions-regression.test.ts",
+    "app/src/components/admin/SectionTable.tsx",
+    "docs/superpowers/plans/2026-05-31-admin-sections-crud.md",
+    "docs/superpowers/specs/2026-05-31-admin-sections-crud-design.md",
+    "CC-Session-Logs/31-05-2026-phase6-admin-programme-crud.md",
+    "docs/superpowers/plans/2026-05-31-admin-programme-crud.md",
+    "docs/superpowers/specs/2026-05-31-admin-user-management-phase6-design.md",
+    "Notes/bugs.md",
+    "CC-Session-Logs/31-05-2026-02_59-phase6-admin-user-role-change-deactivation.md",
+    "Notes/roadmap.md",
+    "Notes/Login.md",
+    "docs/superpowers/plans/2026-05-31-admin-user-management.md",
+    "CC-Session-Logs/31-05-2026-phase6-codex-followup-admin-moderation-and-classes-wiring.md",
+    "CC-Session-Logs/30-05-2026-phase6c-upload-architecture-and-lecturer-fixes.md",
+    "CC-Session-Logs/29-05-2026-phase6b3-attendance-ui-and-lecturer-tasks-crud.md",
+    "CC-Session-Logs/29-05-2026-phase6b-codex-review-uploader-authz-restore.md",
+    "CC-Session-Logs/29-05-2026-phase6b-resource-post-mutations.md",
+    "CC-Session-Logs/29-05-2026-phase6-mutation-audit-and-action-scaffolding.md",
+    "CC-Session-Logs/28-05-2026-resume-notes-update-graphify-rebuild.md",
+    "CC-Session-Logs/28-05-2026-phase5-codex-auth-followup.md",
+    "docs/auth-rbac-review.md",
+    "CC-Session-Logs/28-05-2026-phase5-auth-rbac-hardening.md",
+    "Notes/dev-log.md",
+    "app/public/college-logo.png",
+    "app/node_modules/retry/equation.gif",
+    "Reference Images/College-Logo.png",
+    "Reference Images/College_Logo.png",
+    "Reference Images/ea-inst-logo-ucsi-college.png",
+    "Reference Images/IISV AcademicPage.png",
+    "Reference Images/IISV2 ProfilePage.png",
+    "Reference Images/IISV2 HOMEPAGE.png",
+    "Reference Images/IISV2 LOGIN.png",
+    "Reference Images/IISV2 TimeTablePage.png"
+  ]
+}

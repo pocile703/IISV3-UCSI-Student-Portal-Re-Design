@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ucsi_portal_db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ucsi}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ucsi_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-ucsi_portal}
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  pgdata:

@@ -1,0 +1,633 @@
+// UCSI Student Portal — Prisma Schema
+// Source of truth: docs/database-schema.md, docs/backend-readiness-review.md,
+//                  docs/auth-flow.md, docs/security-notes.md
+//
+// Key design decisions baked in:
+//   • Invoice.amount_outstanding is NOT stored — compute via Payment._sum at query time
+//   • ClassPost.courseSectionId = null → global admin announcement (no separate Announcement table)
+//   • Attendance links directly to student + section (not through enrollment) — historical records persist for dropped students
+//   • TeachingAssignment is the authorization gate for all lecturer mutations on a section
+//   • LearningResource.uploadedBy and ClassPost.authorId must be checked in PATCH/DELETE handlers
+//     (TeachingAssignment alone does not block co-assigned lecturers from mutating each other's content)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// In Prisma 7, the connection URL moved out of schema.prisma.
+// DATABASE_URL is configured in prisma.config.ts (see app/prisma.config.ts).
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum Role {
+  STUDENT
+  LECTURER
+  ADMIN
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum MaritalStatus {
+  SINGLE
+  MARRIED
+  OTHER
+}
+
+enum CourseType {
+  CORE
+  ELECTIVE
+  MPW
+  BRIDGING
+}
+
+enum ProgrammeEnrollmentStatus {
+  ACTIVE
+  COMPLETED
+  WITHDRAWN
+  DEFERRED
+}
+
+// PENDING_ADD and PENDING_DROP intentionally omitted: pending state lives ONLY in
+// AddDropRequest.status. StudentSectionEnrollment stores only actual (post-approval) state.
+// Approval handler: $transaction → mark AddDropRequest APPROVED → upsert StudentSectionEnrollment.
+enum SectionEnrollmentStatus {
+  ENROLLED
+  DROPPED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+enum ResourceType {
+  SLIDE
+  TUTORIAL
+  EXERCISE
+  ASSIGNMENT
+  RECORDING
+  OTHER
+}
+
+enum PostType {
+  ANNOUNCEMENT
+  URGENT
+  REMINDER
+  UPDATE
+}
+
+enum InvoiceStatus {
+  UNPAID
+  PARTIAL
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum PaymentMode {
+  TRANSFER
+  ONLINE
+  CASH
+  CARD
+  OTHER
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum NotificationType {
+  ATTENDANCE_ALERT
+  FEE_ALERT
+  GRADE_PUBLISHED
+  RESOURCE_UPLOADED
+  SYSTEM
+}
+
+enum FeedbackStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  RESOLVED
+  CLOSED
+}
+
+enum AddDropAction {
+  ADD
+  DROP
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// ─── Core Auth ───────────────────────────────────────────────────────────────
+
+// PROFILE INVARIANT (application layer): role = STUDENT requires a Student profile row;
+// role = LECTURER requires a Lecturer profile row. The DB allows a mismatch — Phase 4 seed
+// and Phase 5 JWT callback must fail-hard on missing profile rows to prevent a role from
+// functioning without its profile data. DB-level enforcement (partial unique index or CHECK
+// referencing Student/Lecturer existence) deferred until Phase 5 handlers are stable.
+model User {
+  id                 String   @id @default(uuid()) @db.Uuid
+  username           String   @unique @db.VarChar(50)
+  emailInstitutional String   @unique @db.VarChar(100)
+  emailPersonal      String?  @db.VarChar(150)
+  passwordHash       String   @db.VarChar(255)
+  role               Role
+  isActive           Boolean  @default(true)
+  // sessionVersion is embedded in the JWT and checked by middleware on every request.
+  // Increment when an admin changes this user's role to force immediate re-login.
+  sessionVersion     Int      @default(1)
+  createdAt          DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt          DateTime @updatedAt      @db.Timestamptz(3)
+
+  student              Student?
+  lecturer             Lecturer?
+  sessions             Session[]
+  classPosts           ClassPost[]          @relation("PostAuthor")
+  attendancesRecorded  Attendance[]         @relation("AttendanceRecorder")
+  notifications        Notification[]
+  addDropsReviewed     AddDropRequest[]     @relation("AddDropReviewer")
+  progressionsReviewed ProgressionRequest[] @relation("ProgressionReviewer")
+  auditLogs            AdminAuditLog[]      @relation("AuditActor")
+}
+
+// Auth.js DB session — managed by the Auth.js Prisma adapter (Phase 5).
+model Session {
+  id           String   @id @default(uuid()) @db.Uuid
+  sessionToken String   @unique @db.VarChar(255)
+  userId       String   @db.Uuid
+  expires      DateTime @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─── Student System ──────────────────────────────────────────────────────────
+
+model Student {
+  id               String        @id @default(uuid()) @db.Uuid
+  userId           String        @unique @db.Uuid
+  studentNumber    String        @unique @db.VarChar(20)
+  fullName         String        @db.VarChar(150)
+  dateOfBirth      DateTime      @db.Date
+  gender           Gender
+  nationality      String        @db.VarChar(80)
+  maritalStatus    MaritalStatus
+  mobile           String        @db.VarChar(20)
+  guardianName     String        @db.VarChar(150)
+  guardianRelation String        @db.VarChar(80)
+  addressLine1     String        @db.VarChar(200)
+  addressLine2     String?       @db.VarChar(200)
+  city             String        @db.VarChar(100)
+  state            String        @db.VarChar(100)
+  postcode         String        @db.VarChar(20)
+  country          String        @db.VarChar(80)
+  avatarUrl        String?       @db.VarChar(500)
+  thecnUsername    String?       @db.VarChar(100)
+  createdAt        DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime      @updatedAt      @db.Timestamptz(3)
+
+  user                 User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  programmeEnrollments ProgrammeEnrollment[]
+  sectionEnrollments   StudentSectionEnrollment[]
+  attendances          Attendance[]
+  invoices             Invoice[]
+  feedbacks            Feedback[]
+  addDropRequests      AddDropRequest[]
+  progressionRequests  ProgressionRequest[]
+}
+
+model Programme {
+  id            String  @id @default(uuid()) @db.Uuid
+  code          String  @unique @db.VarChar(30)
+  name          String  @db.VarChar(200)
+  totalCredits  Int
+  durationYears Int
+  isActive      Boolean @default(true)
+
+  programmeEnrollments ProgrammeEnrollment[]
+  semesters            Semester[]
+}
+
+model ProgrammeEnrollment {
+  id                     String                    @id @default(uuid()) @db.Uuid
+  studentId              String                    @db.Uuid
+  programmeId            String                    @db.Uuid
+  fileNumber             String                    @db.VarChar(50)
+  intakeDate             DateTime                  @db.Date
+  expectedGradDate       DateTime                  @db.Date
+  status                 ProgrammeEnrollmentStatus
+  admitDate              DateTime                  @db.Date
+  programmeAttachmentUrl String?                   @db.VarChar(500)
+
+  student   Student   @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  programme Programme @relation(fields: [programmeId], references: [id], onDelete: Restrict)
+  invoices  Invoice[]
+
+  // Supporting constraint for the Invoice composite FK:
+  // Invoice.(programmeEnrollmentId, studentId) → ProgrammeEnrollment.(id, studentId)
+  // enforces that an invoice can never reference an enrollment belonging to a different student.
+  // The composite FK itself is added as raw SQL in migration schema_invariants_and_indexes
+  // because Prisma cannot express it via @relation (studentId is already a FK to Student).
+  @@unique([id, studentId])
+}
+
+model Semester {
+  id             String   @id @default(uuid()) @db.Uuid
+  programmeId    String   @db.Uuid
+  name           String   @db.VarChar(80)
+  academicYear   Int
+  semesterNumber Int
+  startDate      DateTime @db.Date
+  endDate        DateTime @db.Date
+  isCurrent      Boolean  @default(false)
+
+  programme        Programme           @relation(fields: [programmeId], references: [id], onDelete: Restrict)
+  courseSections   CourseSection[]
+  fromProgressions ProgressionRequest[] @relation("FromSemester")
+  toProgressions   ProgressionRequest[] @relation("ToSemester")
+
+  // Hot path: "current semester for this student's programme" — every timetable and academic page load
+  @@index([programmeId, isCurrent])
+}
+
+model Course {
+  id             String     @id @default(uuid()) @db.Uuid
+  code           String     @unique @db.VarChar(20)
+  title          String     @db.VarChar(200)
+  credits        Decimal    @db.Decimal(4, 1)
+  type           CourseType
+  mpwCategory    String?    @db.VarChar(50)
+  mqaRequirement Boolean    @default(false)
+  isActive       Boolean    @default(true)
+
+  courseSections CourseSection[]
+}
+
+// Admin-owned. No other role mutates CourseSection.
+// Timetable is derived from this table — there is no separate Timetable table.
+// Admin CRUD surface: /admin/sections (Phase 6).
+model CourseSection {
+  id          String   @id @default(uuid()) @db.Uuid
+  courseId    String   @db.Uuid
+  semesterId  String   @db.Uuid
+  sectionCode String   @db.VarChar(20)
+  room        String?  @db.VarChar(50)
+  dayOfWeek   Int      // 0 = Monday … 6 = Sunday
+  timeStart   DateTime @db.Time
+  timeEnd     DateTime @db.Time
+  maxCapacity Int
+  // Soft-deactivation: inactive sections are hidden from student/lecturer views.
+  // Admin queries may include inactive rows explicitly. Hard delete is blocked by Restrict FKs.
+  isActive    Boolean  @default(true)
+
+  course              Course                     @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  semester            Semester                   @relation(fields: [semesterId], references: [id], onDelete: Restrict)
+  teachingAssignments TeachingAssignment[]
+  studentEnrollments  StudentSectionEnrollment[]
+  learningResources   LearningResource[]
+  classPosts          ClassPost[]
+  attendances         Attendance[]
+  addDropRequests     AddDropRequest[]
+
+  // Prevents duplicate offerings of the same course+section code within a semester.
+  // Without this, two DIT7044-A rows in Sem 1 2024 would create ambiguous TeachingAssignment
+  // and StudentSectionEnrollment targets.
+  @@unique([semesterId, courseId, sectionCode])
+}
+
+model StudentSectionEnrollment {
+  id              String                  @id @default(uuid()) @db.Uuid
+  studentId       String                  @db.Uuid
+  courseSectionId String                  @db.Uuid
+  status          SectionEnrollmentStatus @default(ENROLLED)
+  enrolledAt      DateTime                @default(now()) @db.Timestamptz(3)
+
+  student       Student       @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  courseSection CourseSection @relation(fields: [courseSectionId], references: [id], onDelete: Restrict)
+  result        Result?
+
+  @@unique([studentId, courseSectionId])
+  @@index([studentId])
+  @@index([courseSectionId])
+}
+
+model Result {
+  id                         String  @id @default(uuid()) @db.Uuid
+  studentSectionEnrollmentId String  @unique @db.Uuid
+  grade                      String  @db.VarChar(5)
+  standing                   String  @db.VarChar(20)
+  attendancePercentage       Decimal @db.Decimal(5, 2)
+  isPublished                Boolean @default(false)
+
+  enrollment StudentSectionEnrollment @relation(fields: [studentSectionEnrollmentId], references: [id], onDelete: Restrict)
+
+  @@index([studentSectionEnrollmentId, isPublished])
+}
+
+// Attendance links to student + section directly (NOT through StudentSectionEnrollment).
+// This is intentional — attendance is a historical observation of physical presence.
+// A dropped student's prior records must persist.
+// @@unique prevents duplicate saves from concurrent lecturer clients.
+model Attendance {
+  id              String           @id @default(uuid()) @db.Uuid
+  studentId       String           @db.Uuid
+  courseSectionId String           @db.Uuid
+  date            DateTime         @db.Date
+  status          AttendanceStatus
+  recordedBy      String           @db.Uuid
+
+  student       Student       @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  courseSection CourseSection @relation(fields: [courseSectionId], references: [id], onDelete: Restrict)
+  recorder      User          @relation("AttendanceRecorder", fields: [recordedBy], references: [id], onDelete: Restrict)
+
+  @@unique([studentId, courseSectionId, date])
+  // Index for the student absence history view.
+  @@index([studentId, date])
+  // Index for "attendance roster for a section on a given date" — the lecturer mark-attendance path.
+  @@index([courseSectionId, date])
+}
+
+// ─── Lecturer System ─────────────────────────────────────────────────────────
+
+model Lecturer {
+  id            String  @id @default(uuid()) @db.Uuid
+  userId        String  @unique @db.Uuid
+  fullName      String  @db.VarChar(150)
+  staffNumber   String  @unique @db.VarChar(30)
+  department    String  @db.VarChar(100)
+  thecnUsername String? @db.VarChar(100)
+
+  user                User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  teachingAssignments TeachingAssignment[]
+  uploadedResources   LearningResource[]
+  tasks               Task[]
+}
+
+// Personal task reminders visible on the lecturer dashboard.
+// Scoped per-lecturer; no section relation — tasks may span multiple sections or be personal.
+model Task {
+  id         String    @id @default(uuid()) @db.Uuid
+  lecturerId String    @db.Uuid
+  text       String    @db.VarChar(500)
+  context    String?   @db.VarChar(200)
+  dueDate    DateTime? @db.Date
+  isDone     Boolean   @default(false)
+  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime  @updatedAt @db.Timestamptz(3)
+
+  lecturer Lecturer @relation(fields: [lecturerId], references: [id], onDelete: Cascade)
+
+  @@index([lecturerId, isDone])
+}
+
+// Authorization gate for all lecturer operations on a CourseSection.
+// PATCH/DELETE on LearningResource and ClassPost additionally require uploadedBy/authorId check.
+model TeachingAssignment {
+  id              String   @id @default(uuid()) @db.Uuid
+  lecturerId      String   @db.Uuid
+  courseSectionId String   @db.Uuid
+  assignedAt      DateTime @default(now()) @db.Timestamptz(3)
+
+  lecturer      Lecturer      @relation(fields: [lecturerId], references: [id], onDelete: Restrict)
+  courseSection CourseSection @relation(fields: [courseSectionId], references: [id], onDelete: Restrict)
+
+  @@unique([lecturerId, courseSectionId])
+  // "Get all sections for a lecturer" — lecturer dashboard and timetable.
+  @@index([lecturerId])
+  // "Who teaches this section?" — student timetable, enrollment queries, admin section views.
+  @@index([courseSectionId])
+}
+
+// ─── Learning Resources System ───────────────────────────────────────────────
+
+// uploadedBy check is MANDATORY on PATCH/DELETE — TeachingAssignment alone does not prevent
+// a co-assigned lecturer from mutating another lecturer's resource in the same section.
+model LearningResource {
+  id              String       @id @default(uuid()) @db.Uuid
+  courseSectionId String       @db.Uuid
+  uploadedBy      String       @db.Uuid
+  title           String       @db.VarChar(255)
+  description     String?      @db.Text
+  type            ResourceType
+  isPublished     Boolean      @default(false)
+  createdAt       DateTime     @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime     @updatedAt      @db.Timestamptz(3)
+
+  courseSection CourseSection        @relation(fields: [courseSectionId], references: [id], onDelete: Restrict)
+  lecturer      Lecturer             @relation(fields: [uploadedBy], references: [id], onDelete: Restrict)
+  attachments   ResourceAttachment[]
+
+  // Composite index for the common student read path: published resources for a section.
+  // Matches: WHERE courseSectionId = $1 AND isPublished = true
+  // Single-column courseSectionId index omitted — the composite index covers the prefix.
+  @@index([courseSectionId, isPublished])
+}
+
+// @@unique([storageKey]) prevents R2/S3 key namespace collisions — required constraint.
+model ResourceAttachment {
+  id               String @id @default(uuid()) @db.Uuid
+  resourceId       String @db.Uuid
+  originalFilename String @db.VarChar(255)
+  mimeType         String @db.VarChar(100)
+  fileSizeBytes    BigInt
+  storageKey       String @db.VarChar(500)
+  downloadCount    Int    @default(0)
+
+  resource LearningResource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  @@unique([storageKey])
+}
+
+// courseSectionId = null   → global admin announcement (AnnouncementFeed: WHERE courseSectionId IS NULL)
+// courseSectionId = non-null → section-scoped lecturer post
+// Replaces the removed Announcement table.
+//
+// APPLICATION INVARIANTS — enforced by API handlers, not the DB schema:
+//   1. Only ADMIN may write rows where courseSectionId IS NULL.
+//   2. Only LECTURER may write rows where courseSectionId IS NOT NULL, and only for sections
+//      they are assigned to (TeachingAssignment check).
+//   3. authorId MUST equal session.user.id — never set from the request body.
+//   4. PATCH/DELETE require post.authorId === session.user.id (ownership check) in addition
+//      to the TeachingAssignment gate (which uses session.user.lecturerId, the Lecturer profile
+//      row ID). These are different identifiers: authorId → User.id, TeachingAssignment →
+//      Lecturer.id. Co-assigned lecturers must not mutate each other's posts.
+//
+// DB-level enforcement of rule 1/2 (role+scope coupling) would require a CHECK constraint
+// via a migration-level raw SQL block. Defer until Phase 5 handlers are proven correct.
+//
+// onDelete: Restrict — section deletion must not silently promote section-scoped posts to
+// global announcements. A post that changes scope through deletion corrupts authorization
+// reasoning: NULL means admin-authored-global, not orphaned-lecturer-post.
+model ClassPost {
+  id              String   @id @default(uuid()) @db.Uuid
+  courseSectionId String?  @db.Uuid
+  authorId        String   @db.Uuid
+  type            PostType
+  title           String   @db.VarChar(255)
+  body            String   @db.Text
+  isPinned        Boolean  @default(false)
+  isPublished     Boolean  @default(true)
+  createdAt       DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime @updatedAt      @db.Timestamptz(3)
+
+  courseSection CourseSection? @relation(fields: [courseSectionId], references: [id], onDelete: Restrict)
+  author        User           @relation("PostAuthor", fields: [authorId], references: [id], onDelete: Restrict)
+
+  // Composite index for the common student read path: published posts for a section.
+  // Matches: WHERE courseSectionId = $1 AND isPublished = true
+  // Single-column courseSectionId index omitted — the composite index covers the prefix.
+  @@index([courseSectionId, isPublished])
+}
+
+// ─── Financial System ────────────────────────────────────────────────────────
+
+// amount_outstanding is NOT stored — always compute at query time:
+//   const totals = await prisma.payment.aggregate({
+//     where: { invoiceId, status: 'COMPLETED' },
+//     _sum: { amount: true },
+//   })
+//   const outstanding = tuitionFee - lessAmount - (totals._sum.amount ?? 0)
+//
+// Invoice records must never be hard-deleted — use status = 'CANCELLED'.
+//
+// NORMALIZATION INVARIANT: programmeEnrollmentId must reference an enrollment whose studentId
+// equals Invoice.studentId. The @@unique([id, studentId]) on ProgrammeEnrollment backs a
+// composite FK that is live in the DB (migration schema_invariants_and_indexes). Prisma client
+// does NOT know about this composite FK — violations surface as runtime DB errors, not type
+// errors. Handlers MUST still validate explicitly:
+//   const enroll = await prisma.programmeEnrollment.findUnique({ where: { id: programmeEnrollmentId } })
+//   if (enroll.studentId !== studentId) throw new ForbiddenError()
+model Invoice {
+  id                    String        @id @default(uuid()) @db.Uuid
+  studentId             String        @db.Uuid
+  programmeEnrollmentId String        @db.Uuid
+  invoiceNumber         String        @unique @db.VarChar(50)
+  tuitionFee            Decimal       @db.Decimal(10, 2)
+  lessAmount            Decimal       @db.Decimal(10, 2)
+  status                InvoiceStatus @default(UNPAID)
+  dueDate               DateTime      @db.Date
+  programmeSemester     String        @db.VarChar(50)
+  issuedAt              DateTime      @db.Date
+
+  student             Student             @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  programmeEnrollment ProgrammeEnrollment @relation(fields: [programmeEnrollmentId], references: [id], onDelete: Restrict)
+  payments            Payment[]
+
+  @@index([studentId])
+}
+
+// Payment records must never be hard-deleted — use status = 'REFUNDED'.
+model Payment {
+  id                String        @id @default(uuid()) @db.Uuid
+  invoiceId         String        @db.Uuid
+  transactionNumber String        @unique @db.VarChar(100)
+  amount            Decimal       @db.Decimal(10, 2)
+  paymentDate       DateTime      @db.Date
+  mode              PaymentMode
+  referenceNo       String?       @db.VarChar(100)
+  status            PaymentStatus @default(PENDING)
+  recordedAt        DateTime      @default(now()) @db.Timestamptz(3)
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+}
+
+// ─── Communication System ────────────────────────────────────────────────────
+
+model Notification {
+  id        String           @id @default(uuid()) @db.Uuid
+  userId    String           @db.Uuid
+  title     String           @db.VarChar(255)
+  body      String           @db.Text
+  type      NotificationType
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now()) @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Covering index for "recent unread for user" — polled on every page load
+  @@index([userId, isRead, createdAt(sort: Desc)])
+}
+
+model Feedback {
+  id         String         @id @default(uuid()) @db.Uuid
+  studentId  String         @db.Uuid
+  subject    String         @db.VarChar(255)
+  body       String         @db.Text
+  status     FeedbackStatus @default(SUBMITTED)
+  createdAt  DateTime       @default(now()) @db.Timestamptz(3)
+  resolvedAt DateTime?      @db.Timestamptz(3)
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Restrict)
+}
+
+// ─── Workflow Tables ─────────────────────────────────────────────────────────
+
+// Approval MUST be a $transaction:
+//   1. addDropRequest.update({ status: 'APPROVED' })
+//   2. studentSectionEnrollment.create (or update for drop)
+//   With maxCapacity check inside the same transaction before creating enrollment.
+model AddDropRequest {
+  id              String        @id @default(uuid()) @db.Uuid
+  studentId       String        @db.Uuid
+  courseSectionId String        @db.Uuid
+  action          AddDropAction
+  status          RequestStatus @default(PENDING)
+  reason          String?       @db.Text
+  reviewedBy      String?       @db.Uuid
+  createdAt       DateTime      @default(now()) @db.Timestamptz(3)
+  reviewedAt      DateTime?     @db.Timestamptz(3)
+
+  student       Student       @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  courseSection CourseSection @relation(fields: [courseSectionId], references: [id], onDelete: Restrict)
+  reviewer      User?         @relation("AddDropReviewer", fields: [reviewedBy], references: [id], onDelete: SetNull)
+}
+
+model ProgressionRequest {
+  id             String        @id @default(uuid()) @db.Uuid
+  studentId      String        @db.Uuid
+  fromSemesterId String        @db.Uuid
+  toSemesterId   String        @db.Uuid
+  reason         String        @db.Text
+  status         RequestStatus @default(PENDING)
+  reviewedBy     String?       @db.Uuid
+  createdAt      DateTime      @default(now()) @db.Timestamptz(3)
+  reviewedAt     DateTime?     @db.Timestamptz(3)
+
+  student      Student  @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  fromSemester Semester @relation("FromSemester", fields: [fromSemesterId], references: [id], onDelete: Restrict)
+  toSemester   Semester @relation("ToSemester", fields: [toSemesterId], references: [id], onDelete: Restrict)
+  reviewer     User?    @relation("ProgressionReviewer", fields: [reviewedBy], references: [id], onDelete: SetNull)
+}
+
+// ─── Admin Audit Log ─────────────────────────────────────────────────────────
+
+model AdminAuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  actorId     String   @db.Uuid
+  action      String   @db.VarChar(100)
+  targetType  String   @db.VarChar(50)
+  targetId    String   @db.Uuid
+  beforeValue Json?
+  afterValue  Json?
+  ipAddress   String   @db.Inet
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+
+  actor User @relation("AuditActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([targetType, targetId])
+}

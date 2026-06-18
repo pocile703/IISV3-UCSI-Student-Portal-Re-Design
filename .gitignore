@@ -1,0 +1,22 @@
+# macOS
+.DS_Store
+
+# Separate nested git repos (too large, separate projects)
+IISV3/
+next-app/
+
+# Editor state
+.obsidian/
+
+# AI tooling (not part of the project)
+CLAUDE.md
+app/CLAUDE.md
+app/AGENTS.md
+.claude/
+app/.claude/
+.superpowers/
+CC-Session-Logs/
+graphify-out/
+examples/
+docs/superpowers/
+docs/graphs/
