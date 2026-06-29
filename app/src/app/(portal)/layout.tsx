@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { headers } from 'next/headers'
 import type { Role } from '@/types/user'
 import { prisma } from '@/lib/prisma'
+import { getNotificationsData } from '@/services/notifications-queries'
 import { LayoutProvider } from '@/contexts/LayoutContext'
 import { SkipToMain } from '@/components/layout/SkipToMain'
 import { TopBar } from '@/components/layout/TopBar'
@@ -47,12 +48,19 @@ export default async function PortalLayout({
 
   // S1/S2: Re-validate sessionVersion and isActive on every portal request.
   // Catches admin role-changes and account deactivations before the 24h JWT expires.
-  const dbUser = session.user.id
-    ? await prisma.user.findUnique({
-        where: { id: session.user.id },
-        select: { isActive: true, sessionVersion: true },
-      })
-    : null
+  // Notifications are fetched in the same round-trip (the bell renders on every page).
+  const userId = session.user.id
+  const [dbUser, notifications] = await Promise.all([
+    userId
+      ? prisma.user.findUnique({
+          where: { id: userId },
+          select: { isActive: true, sessionVersion: true },
+        })
+      : Promise.resolve(null),
+    userId
+      ? getNotificationsData(userId)
+      : Promise.resolve({ items: [], unreadCount: 0 }),
+  ])
   if (!dbUser || !dbUser.isActive || dbUser.sessionVersion !== session.user.sessionVersion) {
     redirect('/login')
   }
@@ -63,7 +71,7 @@ export default async function PortalLayout({
     <LayoutProvider>
       <SkipToMain />
       <div className="flex h-screen flex-col overflow-hidden">
-        <TopBar role={role} userName={userName} />
+        <TopBar role={role} userName={userName} notifications={notifications} />
         <div className="flex flex-1 overflow-hidden">
           <Sidebar role={role} />
           <MobileDrawer role={role} />

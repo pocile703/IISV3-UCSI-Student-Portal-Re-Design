@@ -3,6 +3,7 @@
 import Image from 'next/image'
 import { Menu } from 'lucide-react'
 import type { Role } from '@/types/user'
+import type { NotificationsData } from '@/types/notification'
 import { useLayoutContext } from '@/contexts/LayoutContext'
 import { NotificationBell } from './NotificationBell'
 import { ThemeToggle } from './ThemeToggle'
@@ -17,9 +18,10 @@ const PORTAL_LABEL: Record<Role, string> = {
 interface TopBarProps {
   role: Role
   userName: string
+  notifications: NotificationsData
 }
 
-export function TopBar({ role, userName }: TopBarProps) {
+export function TopBar({ role, userName, notifications }: TopBarProps) {
   const { mobileOpen, setMobileOpen } = useLayoutContext()
 
   return (
@@ -53,7 +55,10 @@ export function TopBar({ role, userName }: TopBarProps) {
       <div className="flex-1" />
 
       <ThemeToggle />
-      <NotificationBell />
+      <NotificationBell
+        initialItems={notifications.items}
+        initialUnread={notifications.unreadCount}
+      />
       <UserMenu role={role} userName={userName} />
     </header>
   )
