@@ -49,6 +49,7 @@ export async function proxy(req: NextRequest) {
     path.startsWith('/finance') ||
     path.startsWith('/classes') ||
     path.startsWith('/feedback') ||
+    path.startsWith('/requests') ||
     path.startsWith('/profile')
 
   if (isStudentRoute && role !== 'student') {
@@ -84,6 +85,7 @@ export const config = {
     '/finance/:path*',
     '/classes/:path*',
     '/feedback/:path*',
+    '/requests/:path*',
     '/profile/:path*',
     '/lecturer/:path*',
     '/admin/:path*',

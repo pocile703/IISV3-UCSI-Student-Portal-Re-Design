@@ -11,7 +11,7 @@ import { MobileDrawer } from '@/components/layout/MobileDrawer'
 
 // Student-route prefixes — keep in sync with proxy.ts isStudentRoute check.
 // /lecturer/** is lecturer-only; /admin/** is admin-only (both in proxy.ts and here).
-const STUDENT_PREFIXES = ['/dashboard', '/academic', '/timetable', '/finance', '/classes', '/feedback', '/profile']
+const STUDENT_PREFIXES = ['/dashboard', '/academic', '/timetable', '/finance', '/classes', '/feedback', '/requests', '/profile']
 
 function roleHome(role: Role): string {
   if (role === 'admin') return '/admin'

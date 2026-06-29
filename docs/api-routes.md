@@ -261,3 +261,17 @@ Storage backend: **local filesystem** under `<app-root>/uploads/` (gitignored). 
 6. Server: streams file with `Content-Disposition: attachment`, `Cache-Control: no-store`
 
 > **Note:** This is an app-proxied download (server buffers the file). Acceptable at college-project scale. For production with large files, replace `readFile` + `NextResponse` body with a redirect to a pre-signed object-store URL and swap `lib/storage.ts` to an S3-compatible adapter.
+
+## Add/Drop + Progression Request Flow (Phase 7)
+
+Server Actions, not Route Handlers. Models: `AddDropRequest`, `ProgressionRequest` (status `PENDING|APPROVED|REJECTED`).
+
+**Student side** (`app/(portal)/requests/actions.ts`, surface `/requests`):
+1. `submitAddDropRequest` / `submitProgressionRequest` — `getValidatedSession()` + explicit `role === 'student'` (M5).
+2. Server-side validation (form option lists are convenience only): section must be `isActive` + in a `isCurrent` semester + belong to a programme the student is enrolled in; action consistent with current enrollment (no DROP of a non-ENROLLED section, no ADD of an already-ENROLLED one); one PENDING request per section / one PENDING progression at a time.
+3. `revalidatePath('/requests')`.
+
+**Admin side** (`app/(portal)/admin/requests/actions.ts`, surface `/admin/requests`):
+1. `approveAddDropRequest` — `assertAdmin()` + lenient `requestIdSchema`. **`$transaction`**: re-reads the request `FOR`-status `PENDING`, then ADD → capacity check (`count ENROLLED < maxCapacity`) + `upsert` enrollment to `ENROLLED`; DROP → `update` enrollment to `DROPPED`; finally marks the request `APPROVED` with `reviewedBy`/`reviewedAt`. Aborts with a friendly message on capacity/decided/missing-enrollment.
+2. `rejectAddDropRequest` / `approve|rejectProgressionRequest` — guarded `updateMany WHERE status='PENDING'`; `count === 0` → "already decided". Progression decisions are **status-only** (enrollment migration is a Registrar back-office step, out of scope).
+3. Revalidates `/admin/requests`, `/admin`, `/requests` (+ `/timetable`, `/classes` on an approved add/drop).
