@@ -162,14 +162,13 @@ This also resolves S2 — both checks are in the same query.
 
 ### S3 — `callbackUrl` in the middleware redirect is not validated as a relative URL
 
-`proxy.ts`:
+✅ **Resolved.** `proxy.ts` now routes the value through an inline `safeCallback()` guard (edge-safe, no imports) before setting the query param — it rejects any non-`/` prefix and protocol-relative `//` paths, falling back to `/dashboard`. This mirrors `getSafeCallbackUrl()` in `LoginPageClient.tsx`, so both the writer (proxy) and the consumer (login client) sanitise independently (defense-in-depth).
+
 ```ts
-loginUrl.searchParams.set('callbackUrl', `${nextUrl.pathname}${nextUrl.search}`)
+loginUrl.searchParams.set('callbackUrl', safeCallback(`${nextUrl.pathname}${nextUrl.search}`))
 ```
 
-The `pathname` + `search` of a request to the app origin will always be relative, so this specific construction is safe. The risk is if `LoginPageClient` or Auth.js itself follows a `callbackUrl` query param from the URL without validating it is a same-origin path — an open redirect to `https://evil.com` is possible if the parameter is honored verbatim.
-
-Auth.js v5 applies built-in `callbackUrl` validation against `AUTH_URL`. Confirm this is configured in production and that no custom redirect logic in `LoginPageClient` reads `callbackUrl` manually.
+The `pathname` + `search` of a request to the app origin is already relative, so the original construction was safe in practice; the guard closes the gap defensively and keeps the proxy consistent with the client validation. (Auth.js v5 additionally validates `callbackUrl` against `AUTH_URL`.)
 
 ---
 
@@ -252,16 +251,11 @@ A malformed token with no `role` claim silently renders the student navigation. 
 
 ### N3 — `findUniqueOrThrow` in the JWT callback has no try/catch
 
-```ts
-const student = await prisma.student.findUniqueOrThrow({ where: { userId } })
-```
+✅ **Resolved.** The `jwt` callback in `auth.ts` uses `findUnique` (not `findUniqueOrThrow`) for both the Student and Lecturer profile lookups, with null-safe handling — a missing profile row no longer throws `P2025`/500 during sign-in.
 
-If the `Student` profile row doesn't exist for a `role=STUDENT` user (violates the profile invariant), this throws `P2025` during sign-in and produces a 500 on the login API route rather than a clean "Invalid credentials." The CLAUDE.md P2025 pattern is documented for page-level queries but was not applied here.
-
-**Fix:**
 ```ts
 const student = await prisma.student.findUnique({ where: { userId } })
-if (!student) return null  // authorize() returns null → "Invalid credentials"
+// null-safe: token fields simply remain unset rather than throwing
 ```
 
 ---
@@ -280,7 +274,7 @@ if (!student) return null  // authorize() returns null → "Invalid credentials"
 
 ## Findings Reference Table
 
-**Last updated:** 2026-05-28 (session 40 hardening pass complete)
+**Last updated:** 2026-06-29 (S3 closed via `proxy.ts` `safeCallback`; N3 confirmed closed; N1/N4/N5 accepted for assignment scope)
 
 | ID | Area | Risk | Status |
 |----|------|------|--------|
@@ -291,12 +285,12 @@ if (!student) return null  // authorize() returns null → "Invalid credentials"
 | **M5** | thecn actions lack role assertion | Admin can invoke wrong-role action | ✅ Closed — all 3 Server Actions assert role explicitly |
 | **S1** | `sessionVersion` not DB-validated | Role changes don't terminate sessions | ✅ Closed — layout runs `prisma.user.findUnique` per request |
 | **S2** | `isActive` not re-checked post-login | Disabled accounts retain 24h access | ✅ Closed — same query as S1 covers both |
-| **S3** | `callbackUrl` not validated as relative | Open redirect risk | ✅ Closed — `getSafeCallbackUrl()` in `LoginPageClient.tsx` rejects non-`/` and `//` |
+| **S3** | `callbackUrl` not validated as relative | Open redirect risk | ✅ Closed — `safeCallback()` in `proxy.ts` (writer) + `getSafeCallbackUrl()` in `LoginPageClient.tsx` (consumer) both reject non-`/` and `//` |
 | **S4** | Lecturer `sectionId` uses mock allowlist | Missed replacement = IDOR in Phase 6 | ✅ Closed — both pages now use `TeachingAssignment` DB check |
 | **S5** | `submitFeedback` error-not-redirect on no session | Inconsistent session-expiry UX | ✅ Closed — redirects to `/login` on missing session |
 | **S6** | Feedback `body` has no max length | Unbounded DB write | ✅ Closed — `.max(5000)` added to Zod schema |
-| **N1** | `token.sub ?? ''` silent empty | Silent bad state on malformed token | Open — layout DB check provides indirect safety; explicit fix deferred |
+| **N1** | `token.sub ?? ''` silent empty | Silent bad state on malformed token | Accepted — layout DB check provides indirect safety; downstream `if (!userId)` guards catch the empty sentinel. No code change for assignment scope. |
 | **N2** | `role ?? 'student'` fail-open | Malformed token gets student nav | ✅ Closed as side-effect of M2 — layout now fails-closed on undefined role |
-| **N3** | `findUniqueOrThrow` in JWT callback | 500 on missing profile row at login | Open — Phase 6: swap to `findUnique + return null` |
-| **N4** | `sessionVersion` exposed to client | Unnecessary JWT surface area | Open — remove after Phase 6 admin role-change surface ships |
-| **N5** | No feedback body length cap at admin render | Unbounded render in future admin view | Open — apply `line-clamp` when admin feedback view is built |
+| **N3** | `findUniqueOrThrow` in JWT callback | 500 on missing profile row at login | ✅ Closed — `auth.ts` jwt callback uses `findUnique` with null-safe handling |
+| **N4** | `sessionVersion` exposed to client | Unnecessary JWT surface area | Accepted — it is a server-only comparison value; exposure is harmless (no secret). Trimming the `session` return is cosmetic; deferred. |
+| **N5** | No feedback body length cap at admin render | Unbounded render in future admin view | Accepted — storage capped at 5000 chars (S6); a render-time `line-clamp` is only needed when an admin feedback view is built (not in scope). |

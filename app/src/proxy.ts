@@ -17,6 +17,16 @@ function roleHome(role: Role | undefined): string {
   return role ? (ROLE_HOME[role] ?? '/dashboard') : '/login'
 }
 
+// Server-side mirror of getSafeCallbackUrl in LoginPageClient.tsx (S3).
+// Only same-origin relative paths are allowed; reject protocol-relative ('//evil')
+// and any non-'/' prefix so the post-login redirect can't be pointed off-site.
+// Kept inline (edge-safe — no imports).
+function safeCallback(pathAndSearch: string): string {
+  if (!pathAndSearch.startsWith('/')) return '/dashboard'
+  if (pathAndSearch.startsWith('//')) return '/dashboard'
+  return pathAndSearch
+}
+
 export async function proxy(req: NextRequest) {
   const { nextUrl } = req
   const token = await getToken({ req, secret: process.env.AUTH_SECRET })
@@ -25,7 +35,7 @@ export async function proxy(req: NextRequest) {
   // No session → redirect to /login with callbackUrl
   if (!token) {
     const loginUrl = new URL('/login', nextUrl.origin)
-    loginUrl.searchParams.set('callbackUrl', `${nextUrl.pathname}${nextUrl.search}`)
+    loginUrl.searchParams.set('callbackUrl', safeCallback(`${nextUrl.pathname}${nextUrl.search}`))
     return NextResponse.redirect(loginUrl)
   }
 

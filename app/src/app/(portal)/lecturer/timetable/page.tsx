@@ -3,27 +3,30 @@ import { redirect } from 'next/navigation'
 import { MapPin, Clock, Users } from 'lucide-react'
 import { Card, CardHeader, CardContent } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
-import { MOCK_LECTURER_TEACHING_SESSIONS } from '@/data/mock-lecturer'
+import { getLecturerTimetableData } from '@/services/lecturer-timetable-queries'
 import { DAY_LABELS } from '@/lib/utils'
 
 const DAYS = DAY_LABELS.slice(0, 5) // Mon–Fri
 
 export default async function LecturerTimetablePage() {
   const session = await auth()
-  if (!session?.user?.lecturerId || session.user.role !== 'lecturer') redirect('/login')
+  const lecturerId = session?.user?.lecturerId
+  if (!lecturerId || session.user.role !== 'lecturer') redirect('/login')
+
+  const { semesterName, sessions: teachingSessions } = await getLecturerTimetableData(lecturerId)
 
   return (
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-xl font-semibold text-[--text-primary]">Teaching Schedule</h1>
-        <p className="mt-0.5 text-sm text-[--text-secondary]">Semester 1 2023/24</p>
+        <p className="mt-0.5 text-sm text-[--text-secondary]">{semesterName || 'No active semester'}</p>
       </div>
 
       {/* ── Mobile agenda view (hidden md+) ─────────────────────── */}
       <div className="flex flex-col gap-4 md:hidden">
         {DAYS.map((day, idx) => {
           const dayNum = idx + 1
-          const sessions = MOCK_LECTURER_TEACHING_SESSIONS.filter((s) => s.dayOfWeek === dayNum)
+          const sessions = teachingSessions.filter((s) => s.dayOfWeek === dayNum)
           return (
             <div key={day}>
               <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[--text-secondary]">{day}</p>
@@ -89,7 +92,7 @@ export default async function LecturerTimetablePage() {
           <div className="grid grid-cols-5 gap-3">
             {DAYS.map((day, idx) => {
               const dayNum = idx + 1
-              const sessions = MOCK_LECTURER_TEACHING_SESSIONS.filter((s) => s.dayOfWeek === dayNum)
+              const sessions = teachingSessions.filter((s) => s.dayOfWeek === dayNum)
               return (
                 <div key={day} className="flex flex-col gap-2">
                   <p className="text-center text-xs font-semibold uppercase tracking-wide text-[--text-secondary]">{day}</p>
@@ -133,7 +136,7 @@ export default async function LecturerTimetablePage() {
         </CardHeader>
         <CardContent>
           <div className="flex flex-col divide-y divide-[--ucsi-border]">
-            {[...MOCK_LECTURER_TEACHING_SESSIONS]
+            {[...teachingSessions]
               .sort((a, b) => a.dayOfWeek - b.dayOfWeek || a.timeStart.localeCompare(b.timeStart))
               .map((session) => (
                 <div key={session.sectionId} className="flex items-center gap-4 py-3.5">
@@ -151,7 +154,6 @@ export default async function LecturerTimetablePage() {
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
-                    <Badge variant="ucsi">CORE</Badge>
                     <span className="text-xs text-[--text-secondary]">Sec {session.sectionCode}</span>
                   </div>
                 </div>

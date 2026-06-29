@@ -4,7 +4,7 @@ import { useActionState, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Check, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { StudentRoster, AttendanceStatus } from '@/data/mock-attendance'
+import type { StudentRoster, AttendanceStatus } from '@/types/attendance'
 
 type AttendanceState = { error?: string; success?: boolean }
 

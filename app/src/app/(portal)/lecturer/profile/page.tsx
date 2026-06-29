@@ -1,11 +1,10 @@
 import { User, Phone, BookOpen, Mail } from 'lucide-react'
 import { Card, CardHeader, CardContent } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
-import { mockCourseSections, mockCourses } from '@/data/mock-courses'
-import { MOCK_LECTURER_PROFILE, MOCK_LECTURER_SECTION_IDS, MOCK_LECTURER_STUDENT_COUNTS } from '@/data/mock-lecturer'
-import { formatDate, DAY_LABELS } from '@/lib/utils'
+import { DAY_LABELS } from '@/lib/utils'
 import { ThecnEditForm } from '@/components/profile/ThecnEditForm'
 import { updateLecturerThecnUsername } from './actions'
+import { getLecturerTimetableData } from '@/services/lecturer-timetable-queries'
 import { auth } from '@/auth'
 import { redirect } from 'next/navigation'
 import { prisma } from '@/lib/prisma'
@@ -19,23 +18,42 @@ function Field({ label, value }: { label: string; value?: string }) {
   )
 }
 
-const assignedSections = mockCourseSections.filter((s) =>
-  MOCK_LECTURER_SECTION_IDS.includes(s.id),
-)
+// "Sarah Tan" → "ST"; falls back to the first two characters of a single word.
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return '—'
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+}
 
 export default async function LecturerProfilePage() {
   const session = await auth()
   const lecturerId = session?.user?.lecturerId
   if (!lecturerId || session.user.role !== 'lecturer') redirect('/login')
 
-  // Fetch only thecnUsername from DB; rest of the page still uses mock data (Phase 6).
-  const lecturerDb = await prisma.lecturer.findUnique({
+  const lecturer = await prisma.lecturer.findUnique({
     where: { id: lecturerId },
-    select: { thecnUsername: true },
+    select: {
+      fullName: true,
+      staffNumber: true,
+      department: true,
+      thecnUsername: true,
+      user: { select: { emailInstitutional: true } },
+    },
   })
 
-  const { fullName, initials, staffId, designation, department, faculty,
-          email, phone, office, dateJoined, qualification, specialisation } = MOCK_LECTURER_PROFILE
+  // A missing profile row = broken session, not a 500.
+  if (!lecturer) redirect('/login')
+
+  // Assigned sections come from the shared timetable view-model so the dayOfWeek
+  // convention (1=Mon, label via DAY_LABELS[dayOfWeek - 1]) matches the timetable page.
+  const { semesterName: timetableSemester, sessions: assignedSections } =
+    await getLecturerTimetableData(lecturerId)
+
+  const { fullName, staffNumber, department, thecnUsername } = lecturer
+  const email = lecturer.user.emailInstitutional
+  const initials = initialsOf(fullName)
+  const semesterName = timetableSemester || 'Current semester'
 
   return (
     <div className="flex flex-col gap-6">
@@ -49,8 +67,8 @@ export default async function LecturerProfilePage() {
         </div>
         <div>
           <h1 className="text-xl font-semibold text-[--text-primary]">{fullName}</h1>
-          <p className="text-sm text-[--text-secondary]">{staffId}</p>
-          <Badge variant="ucsi" className="mt-1">{designation}</Badge>
+          <p className="text-sm text-[--text-secondary]">{staffNumber}</p>
+          <Badge variant="ucsi" className="mt-1">{department}</Badge>
         </div>
       </div>
 
@@ -64,12 +82,8 @@ export default async function LecturerProfilePage() {
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <Field label="Staff ID"      value={staffId} />
-            <Field label="Date Joined"   value={formatDate(dateJoined)} />
-            <Field label="Designation"   value={designation} />
-            <Field label="Department"    value={department} />
-            <Field label="Faculty"       value={faculty} />
-            <Field label="Office"        value={office} />
+            <Field label="Staff Number" value={staffNumber} />
+            <Field label="Department"   value={department} />
           </div>
         </CardContent>
       </Card>
@@ -84,25 +98,7 @@ export default async function LecturerProfilePage() {
         </CardHeader>
         <CardContent>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <Field label="Email"  value={email} />
-            <Field label="Phone"  value={phone} />
-            <Field label="Office" value={office} />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Academic background */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <User size={15} className="text-[--text-secondary]" aria-hidden="true" />
-            <h2 className="text-sm font-semibold text-[--text-primary]">Academic Background</h2>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Highest Qualification" value={qualification} />
-            <Field label="Specialisation"        value={specialisation} />
+            <Field label="Institutional Email" value={email} />
           </div>
         </CardContent>
       </Card>
@@ -113,39 +109,40 @@ export default async function LecturerProfilePage() {
           <div className="flex items-center gap-2">
             <BookOpen size={15} className="text-[--text-secondary]" aria-hidden="true" />
             <h2 className="text-sm font-semibold text-[--text-primary]">Assigned Sections</h2>
-            <span className="ml-auto text-xs text-[--text-secondary]">Semester 1 2023/24</span>
+            <span className="ml-auto text-xs text-[--text-secondary]">{semesterName}</span>
           </div>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col divide-y divide-[--ucsi-border]">
-            {assignedSections.map((sec) => {
-              const course = mockCourses.find((c) => c.id === sec.courseId)
-              if (!course) return null
-              const day = DAY_LABELS[sec.dayOfWeek - 1]
-              const students = MOCK_LECTURER_STUDENT_COUNTS[sec.id] ?? 0
-              return (
-                <div key={sec.id} className="flex flex-wrap items-center gap-3 py-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                      <span className="text-sm font-bold" style={{ color: 'var(--ucsi-red)' }}>
-                        {course.code}
-                      </span>
-                      <span className="text-sm text-[--text-primary]">{course.title}</span>
+          {assignedSections.length === 0 ? (
+            <p className="py-6 text-center text-sm text-[--text-muted]">No sections assigned this semester.</p>
+          ) : (
+            <div className="flex flex-col divide-y divide-[--ucsi-border]">
+              {assignedSections.map((sec) => {
+                const day = DAY_LABELS[sec.dayOfWeek - 1] // view-model 1=Mon → DAY_LABELS 0-indexed
+                return (
+                  <div key={sec.sectionId} className="flex flex-wrap items-center gap-3 py-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                        <span className="text-sm font-bold" style={{ color: 'var(--ucsi-red)' }}>
+                          {sec.courseCode}
+                        </span>
+                        <span className="text-sm text-[--text-primary]">{sec.courseTitle}</span>
+                      </div>
+                      <p className="mt-0.5 text-xs text-[--text-secondary]">
+                        Sec {sec.sectionCode} · {sec.room} · {day} {sec.timeStart}–{sec.timeEnd}
+                      </p>
                     </div>
-                    <p className="mt-0.5 text-xs text-[--text-secondary]">
-                      Sec {sec.sectionCode} · {sec.room ?? '—'} · {day} {sec.timeStart}–{sec.timeEnd}
-                    </p>
+                    <Badge variant="neutral">{sec.studentCount} students</Badge>
                   </div>
-                  <Badge variant="neutral">{students} students</Badge>
-                </div>
-              )
-            })}
-          </div>
+                )
+              })}
+            </div>
+          )}
         </CardContent>
       </Card>
 
       {/* E-Portfolio */}
-      <ThecnEditForm current={lecturerDb?.thecnUsername ?? undefined} action={updateLecturerThecnUsername} />
+      <ThecnEditForm current={thecnUsername ?? undefined} action={updateLecturerThecnUsername} />
 
       <p className="flex flex-wrap items-center gap-1.5 text-xs text-[--text-secondary]">
         <Phone size={11} aria-hidden="true" />

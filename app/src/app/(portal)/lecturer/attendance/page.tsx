@@ -5,7 +5,7 @@ import { Users, CheckCircle2 } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import { prisma } from '@/lib/prisma'
-import { generateSessionDates } from '@/data/mock-attendance'
+import { generateSessionDates } from '@/lib/attendance'
 
 export default async function LecturerAttendancePage() {
   const session = await auth()

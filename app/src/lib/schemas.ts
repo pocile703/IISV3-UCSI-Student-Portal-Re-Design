@@ -130,3 +130,23 @@ export const maxCapacitySchema = z
   .string()
   .transform(Number)
   .pipe(z.number().int().min(1, 'Capacity must be at least 1').max(500, 'Capacity cannot exceed 500'))
+
+// ─── Add/Drop + Progression request schemas ───────────────────────────────────
+
+export const requestIdSchema = z.string().regex(UUID_RE, 'Invalid request ID')
+
+// Lowercase to match the form; actions .toUpperCase() before Prisma (enum ADD | DROP).
+export const addDropActionSchema = z.enum(['add', 'drop'], { message: 'Invalid action' })
+
+// Optional reason (AddDropRequest.reason is nullable): '' → undefined.
+export const requestReasonOptionalSchema = z.preprocess(
+  (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+  z.string().trim().max(2000, 'Reason must be 2,000 characters or fewer').optional(),
+)
+
+// Required reason (ProgressionRequest.reason is non-null).
+export const requestReasonRequiredSchema = z
+  .string()
+  .trim()
+  .min(1, 'A reason is required')
+  .max(2000, 'Reason must be 2,000 characters or fewer')

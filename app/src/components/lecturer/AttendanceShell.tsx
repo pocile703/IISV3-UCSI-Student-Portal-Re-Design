@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { AttendanceDatePanel } from './AttendanceDatePanel'
 import { AttendanceRosterPanel } from './AttendanceRosterPanel'
-import type { StudentRoster, AttendanceRecord, AttendanceStatus } from '@/data/mock-attendance'
+import type { StudentRoster, AttendanceRecord, AttendanceStatus } from '@/types/attendance'
 
 type AttendanceState = { error?: string; success?: boolean }
 

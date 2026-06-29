@@ -4,12 +4,8 @@ import { prisma } from '@/lib/prisma'
 import { AttendanceShell } from '@/components/lecturer/AttendanceShell'
 import { saveAttendance } from './actions'
 import type { AttendanceState } from './actions'
-import {
-  generateSessionDates,
-  type StudentRoster,
-  type AttendanceRecord,
-  type AttendanceStatus,
-} from '@/data/mock-attendance'
+import { generateSessionDates } from '@/lib/attendance'
+import type { StudentRoster, AttendanceRecord, AttendanceStatus } from '@/types/attendance'
 
 // Section metadata shape shared by both the lecturer and admin fetch paths.
 type SectionData = {
