@@ -5,6 +5,7 @@ import { ProgrammeEnrollmentStatus } from '@prisma/client'
 import { StatCard } from '@/components/dashboard/StatCard'
 import { UserTable } from '@/components/admin/UserTable'
 import { prisma } from '@/lib/prisma'
+import { getStudentFormData } from '@/services/student-form-queries'
 import type { UserPageRow } from '@/types/admin-users'
 
 export default async function AdminUsersPage() {
@@ -17,6 +18,7 @@ export default async function AdminUsersPage() {
     totalActive,
     totalInactive,
     rawUsers,
+    studentFormData,
   ] = await Promise.all([
     prisma.user.count({ where: { role: 'STUDENT' } }),
     prisma.user.count({ where: { role: 'LECTURER' } }),
@@ -56,6 +58,7 @@ export default async function AdminUsersPage() {
       },
       orderBy: [{ role: 'asc' }, { emailInstitutional: 'asc' }],
     }),
+    getStudentFormData(),
   ])
 
   const initialUsers: UserPageRow[] = rawUsers.map((u) => ({
@@ -134,6 +137,7 @@ export default async function AdminUsersPage() {
           key={usersSnapshotKey}
           initialUsers={initialUsers}
           currentAdminId={currentAdminId}
+          programmes={studentFormData.programmes}
         />
       </section>
 

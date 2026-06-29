@@ -275,3 +275,21 @@ Server Actions, not Route Handlers. Models: `AddDropRequest`, `ProgressionReques
 1. `approveAddDropRequest` — `assertAdmin()` + lenient `requestIdSchema`. **`$transaction`**: re-reads the request `FOR`-status `PENDING`, then ADD → capacity check (`count ENROLLED < maxCapacity`) + `upsert` enrollment to `ENROLLED`; DROP → `update` enrollment to `DROPPED`; finally marks the request `APPROVED` with `reviewedBy`/`reviewedAt`. Aborts with a friendly message on capacity/decided/missing-enrollment.
 2. `rejectAddDropRequest` / `approve|rejectProgressionRequest` — guarded `updateMany WHERE status='PENDING'`; `count === 0` → "already decided". Progression decisions are **status-only** (enrollment migration is a Registrar back-office step, out of scope).
 3. Revalidates `/admin/requests`, `/admin`, `/requests` (+ `/timetable`, `/classes` on an approved add/drop).
+
+## Admin STUDENT Create / Edit Flow (Phase 7)
+
+Server Actions in `app/(portal)/admin/users/actions.ts` (all `assertAdmin`-guarded).
+
+- **`adminCreateUser` (STUDENT branch)** — single `$transaction` creates `User` (role STUDENT) +
+  `Student` profile (18 fields, Zod `studentProfileSchema`) + initial `ProgrammeEnrollment`. The
+  selected programme is checked to exist + be active before the transaction opens. Dates are
+  calendar-validated (`isoDateSchema` round-trips through `Date` to reject e.g. 2026-02-31). P2002
+  surfaces field-specific errors (username / email / studentNumber).
+- **`getStudentProfileForEdit(userId)`** — on-demand read of a Student's editable PII (name,
+  contact, guardian, address). Loaded only when the edit modal opens so the users table never
+  bulk-fetches PII.
+- **`adminUpdateStudentProfile(userId, patch)`** — edits the mutable Student fields (`studentProfileEditSchema`).
+  Identity fields (studentNumber, dateOfBirth, gender) and the programme enrollment are NOT patched here.
+- **Role-change boundary:** `adminUpdateUser` supports LECTURER↔ADMIN only. Switching a role TO or
+  FROM STUDENT is intentionally unsupported (would require creating/deleting a full profile row).
+  Students are created with their profile via `adminCreateUser`.

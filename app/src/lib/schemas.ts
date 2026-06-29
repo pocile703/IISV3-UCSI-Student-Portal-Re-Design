@@ -150,3 +150,69 @@ export const requestReasonRequiredSchema = z
   .trim()
   .min(1, 'A reason is required')
   .max(2000, 'Reason must be 2,000 characters or fewer')
+
+// ─── STUDENT profile schemas (Phase 7 — admin create/edit STUDENT) ────────────
+
+export const genderSchema = z.enum(['MALE', 'FEMALE', 'OTHER'], { message: 'Invalid gender' })
+export const maritalStatusSchema = z.enum(['SINGLE', 'MARRIED', 'OTHER'], { message: 'Invalid marital status' })
+export const programmeEnrollmentStatusSchema = z.enum(
+  ['ACTIVE', 'COMPLETED', 'WITHDRAWN', 'DEFERRED'],
+  { message: 'Invalid enrollment status' },
+)
+// programmeIdSchema is already defined above (Programme field schemas section).
+
+// Calendar-correct YYYY-MM-DD (regex alone accepts 2026-02-31; round-trip rejects it).
+export const isoDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use the date picker (YYYY-MM-DD)')
+  .refine((s) => {
+    const d = new Date(`${s}T00:00:00.000Z`)
+    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s
+  }, 'Invalid calendar date')
+
+const optionalText = (max: number, label: string) =>
+  z.preprocess(
+    (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+    z.string().trim().max(max, `${label} is too long`).optional(),
+  )
+
+// Full STUDENT profile + initial programme enrollment (admin create).
+export const studentProfileSchema = z.object({
+  studentNumber: z.string().trim().min(1, 'Student number is required').max(20, 'Student number is too long'),
+  fullName: z.string().trim().min(1, 'Full name is required').max(150, 'Full name is too long'),
+  dateOfBirth: isoDateSchema,
+  gender: genderSchema,
+  nationality: z.string().trim().min(1, 'Nationality is required').max(80, 'Nationality is too long'),
+  maritalStatus: maritalStatusSchema,
+  mobile: z.string().trim().min(1, 'Mobile number is required').max(20, 'Mobile number is too long'),
+  guardianName: z.string().trim().min(1, 'Guardian name is required').max(150, 'Guardian name is too long'),
+  guardianRelation: z.string().trim().min(1, 'Guardian relation is required').max(80, 'Guardian relation is too long'),
+  addressLine1: z.string().trim().min(1, 'Address line 1 is required').max(200, 'Address is too long'),
+  addressLine2: optionalText(200, 'Address line 2'),
+  city: z.string().trim().min(1, 'City is required').max(100, 'City is too long'),
+  state: z.string().trim().min(1, 'State is required').max(100, 'State is too long'),
+  postcode: z.string().trim().min(1, 'Postcode is required').max(20, 'Postcode is too long'),
+  country: z.string().trim().min(1, 'Country is required').max(80, 'Country is too long'),
+  // Initial programme enrollment
+  programmeId: programmeIdSchema,
+  fileNumber: z.string().trim().min(1, 'File number is required').max(50, 'File number is too long'),
+  intakeDate: isoDateSchema,
+  expectedGradDate: isoDateSchema,
+  admitDate: isoDateSchema,
+  enrollmentStatus: programmeEnrollmentStatusSchema,
+})
+
+// Editable STUDENT profile fields (admin edit — identity/enrollment fields are not patched here).
+export const studentProfileEditSchema = z.object({
+  fullName: z.string().trim().min(1, 'Full name is required').max(150, 'Full name is too long'),
+  mobile: z.string().trim().min(1, 'Mobile number is required').max(20, 'Mobile number is too long'),
+  maritalStatus: maritalStatusSchema,
+  guardianName: z.string().trim().min(1, 'Guardian name is required').max(150, 'Guardian name is too long'),
+  guardianRelation: z.string().trim().min(1, 'Guardian relation is required').max(80, 'Guardian relation is too long'),
+  addressLine1: z.string().trim().min(1, 'Address line 1 is required').max(200, 'Address is too long'),
+  addressLine2: optionalText(200, 'Address line 2'),
+  city: z.string().trim().min(1, 'City is required').max(100, 'City is too long'),
+  state: z.string().trim().min(1, 'State is required').max(100, 'State is too long'),
+  postcode: z.string().trim().min(1, 'Postcode is required').max(20, 'Postcode is too long'),
+  country: z.string().trim().min(1, 'Country is required').max(80, 'Country is too long'),
+})

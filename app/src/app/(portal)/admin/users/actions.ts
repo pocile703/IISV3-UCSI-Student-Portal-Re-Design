@@ -1,15 +1,21 @@
 'use server'
 
 // Admin user management mutations:
-//   adminCreateUser — create a new User account (+ Lecturer profile if LECTURER role)
-//   adminUpdateUser — role change (LECTURER↔ADMIN) and activation/deactivation
+//   adminCreateUser           — create a User account; for LECTURER also creates the
+//                               Lecturer row, for STUDENT also creates the Student
+//                               profile + initial ProgrammeEnrollment (one $transaction).
+//   adminUpdateUser           — role change (LECTURER↔ADMIN) and activation/deactivation.
+//   getStudentProfileForEdit  — on-demand read of a Student's editable PII fields.
+//   adminUpdateStudentProfile — edit a Student's name/contact/guardian/address.
 //
-// Both write paths require admin role (assertAdmin).
+// All write paths require admin role (assertAdmin).
 // adminUpdateUser increments sessionVersion on every real write to force
 // the affected user's existing JWT to become invalid on their next request.
 //
-// Role-change scope: only LECTURER↔ADMIN. STUDENT changes require profile-row
-// creation/deletion (Student has 15+ required fields) — deferred to a future phase.
+// Role-change scope: only LECTURER↔ADMIN. Switching a role TO or FROM STUDENT is
+// intentionally NOT supported as an in-place flip — it would require creating or
+// deleting a Student profile row (18 required fields + a programme enrollment).
+// Students are created with their profile via adminCreateUser instead.
 
 import bcryptjs from 'bcryptjs'
 import { revalidatePath } from 'next/cache'
@@ -18,7 +24,7 @@ import { Prisma, Role } from '@prisma/client'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { getValidatedSession } from '@/lib/session-guard'
-import { userIdSchema } from '@/lib/schemas'
+import { userIdSchema, studentProfileSchema, studentProfileEditSchema } from '@/lib/schemas'
 import type { UserPageRow } from '@/types/admin-users'
 
 type ActionState = { error?: string; success?: boolean }
@@ -49,6 +55,8 @@ const createUserSchema = z.object({
   fullName: z.string().trim().max(150, 'Full name must be 150 characters or fewer').optional(),
   staffNumber: z.string().trim().max(30, 'Staff number must be 30 characters or fewer').optional(),
   department: z.string().trim().max(100, 'Department must be 100 characters or fewer').optional(),
+  // Required when role === 'STUDENT' (the full profile + initial enrollment).
+  student: studentProfileSchema.optional(),
 })
 
 type CreateUserInput = z.input<typeof createUserSchema>
@@ -72,6 +80,20 @@ export async function adminCreateUser(input: CreateUserInput): Promise<CreateUse
     if (!v.fullName) return { error: 'Full name is required for lecturers' }
     if (!v.staffNumber) return { error: 'Staff number is required for lecturers' }
     if (!v.department) return { error: 'Department is required for lecturers' }
+  }
+  if (v.role === 'STUDENT' && !v.student) {
+    return { error: 'Student profile details are required' }
+  }
+
+  // For students, the selected programme must exist and be active before we open
+  // the transaction (a bad FK would otherwise fail mid-transaction with a raw error).
+  if (v.role === 'STUDENT' && v.student) {
+    const programme = await prisma.programme.findUnique({
+      where: { id: v.student.programmeId },
+      select: { isActive: true },
+    })
+    if (!programme) return { error: 'Selected programme not found' }
+    if (!programme.isActive) return { error: 'Selected programme is inactive' }
   }
 
   const passwordHash = await bcryptjs.hash(v.password, 12)
@@ -120,7 +142,78 @@ export async function adminCreateUser(input: CreateUserInput): Promise<CreateUse
       }
     }
 
-    // STUDENT or ADMIN — User row only
+    if (v.role === 'STUDENT' && v.student) {
+      const sp = v.student
+      const { newUser, newStudent, programmeCode } = await prisma.$transaction(async (tx) => {
+        const u = await tx.user.create({
+          data: {
+            username: v.username,
+            emailInstitutional: v.emailInstitutional,
+            passwordHash,
+            role: 'STUDENT',
+          },
+          select: { id: true, isActive: true, emailInstitutional: true },
+        })
+        const s = await tx.student.create({
+          data: {
+            userId: u.id,
+            studentNumber: sp.studentNumber,
+            fullName: sp.fullName,
+            dateOfBirth: new Date(`${sp.dateOfBirth}T00:00:00.000Z`),
+            gender: sp.gender,
+            nationality: sp.nationality,
+            maritalStatus: sp.maritalStatus,
+            mobile: sp.mobile,
+            guardianName: sp.guardianName,
+            guardianRelation: sp.guardianRelation,
+            addressLine1: sp.addressLine1,
+            addressLine2: sp.addressLine2 ?? null,
+            city: sp.city,
+            state: sp.state,
+            postcode: sp.postcode,
+            country: sp.country,
+          },
+          select: { id: true, fullName: true, studentNumber: true },
+        })
+        await tx.programmeEnrollment.create({
+          data: {
+            studentId: s.id,
+            programmeId: sp.programmeId,
+            fileNumber: sp.fileNumber,
+            intakeDate: new Date(`${sp.intakeDate}T00:00:00.000Z`),
+            expectedGradDate: new Date(`${sp.expectedGradDate}T00:00:00.000Z`),
+            admitDate: new Date(`${sp.admitDate}T00:00:00.000Z`),
+            status: sp.enrollmentStatus,
+          },
+        })
+        const prog = await tx.programme.findUnique({
+          where: { id: sp.programmeId },
+          select: { code: true },
+        })
+        return { newUser: u, newStudent: s, programmeCode: prog?.code ?? null }
+      })
+
+      revalidatePath('/admin/users')
+      revalidatePath('/admin')
+
+      return {
+        success: true,
+        user: {
+          id: newUser.id,
+          role: 'STUDENT',
+          isActive: newUser.isActive,
+          emailInstitutional: newUser.emailInstitutional,
+          fullName: newStudent.fullName,
+          studentNumber: newStudent.studentNumber,
+          programmeCode,
+          staffNumber: null,
+          department: null,
+          sectionCodes: [],
+        },
+      }
+    }
+
+    // ADMIN — User row only (no profile table)
     const newUser = await prisma.user.create({
       data: {
         username: v.username,
@@ -158,7 +251,8 @@ export async function adminCreateUser(input: CreateUserInput): Promise<CreateUse
       if (target.includes('username')) return { error: 'Username is already in use' }
       if (target.includes('emailInstitutional')) return { error: 'Email address is already in use' }
       if (target.includes('staffNumber')) return { error: 'Staff number is already in use' }
-      return { error: 'A conflict occurred — check username, email, or staff number' }
+      if (target.includes('studentNumber')) return { error: 'Student number is already in use' }
+      return { error: 'A conflict occurred — check username, email, student or staff number' }
     }
     throw error
   }
@@ -287,4 +381,147 @@ export async function adminUpdateUser(
   revalidatePath('/admin/users')
   revalidatePath('/admin')
   return { success: true }
+}
+
+// ─── getStudentProfileForEdit ─────────────────────────────────────────────────
+
+// Loads the editable fields of a STUDENT profile on demand (when the edit modal
+// opens) so the per-student PII is never bulk-fetched into the users table.
+export type StudentEditFields = {
+  fullName: string
+  mobile: string
+  maritalStatus: 'SINGLE' | 'MARRIED' | 'OTHER'
+  guardianName: string
+  guardianRelation: string
+  addressLine1: string
+  addressLine2: string
+  city: string
+  state: string
+  postcode: string
+  country: string
+  studentNumber: string
+}
+
+export async function getStudentProfileForEdit(
+  userId: string,
+): Promise<{ profile: StudentEditFields } | { error: string }> {
+  await assertAdmin()
+  const parsedId = userIdSchema.safeParse(userId)
+  if (!parsedId.success) return { error: 'Invalid user ID' }
+
+  const student = await prisma.student.findUnique({
+    where: { userId: parsedId.data },
+    select: {
+      fullName: true,
+      mobile: true,
+      maritalStatus: true,
+      guardianName: true,
+      guardianRelation: true,
+      addressLine1: true,
+      addressLine2: true,
+      city: true,
+      state: true,
+      postcode: true,
+      country: true,
+      studentNumber: true,
+    },
+  })
+  if (!student) return { error: 'Student profile not found' }
+
+  return {
+    profile: {
+      ...student,
+      addressLine2: student.addressLine2 ?? '',
+    },
+  }
+}
+
+// ─── adminUpdateStudentProfile ────────────────────────────────────────────────
+
+// Edits the mutable fields of a STUDENT profile (name + contact + guardian + address).
+// Identity fields (studentNumber, dateOfBirth, gender) and the programme enrollment are
+// NOT patched here — those are set at creation and changed through a Registrar process.
+// Takes the User.id (the table row key) and resolves the linked Student row by userId.
+type StudentEditInput = {
+  fullName: string
+  mobile: string
+  maritalStatus: 'SINGLE' | 'MARRIED' | 'OTHER'
+  guardianName: string
+  guardianRelation: string
+  addressLine1: string
+  addressLine2?: string
+  city: string
+  state: string
+  postcode: string
+  country: string
+}
+
+type UpdateStudentResult =
+  | { success: true; user: UserPageRow }
+  | { success?: false; error: string }
+
+export async function adminUpdateStudentProfile(
+  userId: string,
+  patch: StudentEditInput,
+): Promise<UpdateStudentResult> {
+  await assertAdmin()
+
+  const parsedId = userIdSchema.safeParse(userId)
+  if (!parsedId.success) return { error: parsedId.error.issues[0]?.message ?? 'Invalid user ID' }
+
+  const parsed = studentProfileEditSchema.safeParse(patch)
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Invalid input' }
+  const p = parsed.data
+
+  const student = await prisma.student.findUnique({
+    where: { userId: parsedId.data },
+    select: { id: true },
+  })
+  if (!student) return { error: 'Student profile not found' }
+
+  const updated = await prisma.student.update({
+    where: { id: student.id },
+    data: {
+      fullName: p.fullName,
+      mobile: p.mobile,
+      maritalStatus: p.maritalStatus,
+      guardianName: p.guardianName,
+      guardianRelation: p.guardianRelation,
+      addressLine1: p.addressLine1,
+      addressLine2: p.addressLine2 ?? null,
+      city: p.city,
+      state: p.state,
+      postcode: p.postcode,
+      country: p.country,
+    },
+    select: {
+      fullName: true,
+      studentNumber: true,
+      user: { select: { id: true, isActive: true, emailInstitutional: true } },
+      programmeEnrollments: {
+        where: { status: 'ACTIVE' },
+        select: { programme: { select: { code: true } } },
+        take: 1,
+      },
+    },
+  })
+
+  revalidatePath('/admin/users')
+  revalidatePath('/admin')
+
+  return {
+    success: true,
+    user: {
+      id: updated.user.id,
+      role: 'STUDENT',
+      isActive: updated.user.isActive,
+      emailInstitutional: updated.user.emailInstitutional,
+      fullName: updated.fullName,
+      studentNumber: updated.studentNumber,
+      programmeCode: updated.programmeEnrollments[0]?.programme.code ?? null,
+      staffNumber: null,
+      department: null,
+      sectionCodes: [],
+    },
+  }
 }

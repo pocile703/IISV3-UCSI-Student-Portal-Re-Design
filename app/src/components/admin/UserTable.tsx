@@ -5,7 +5,9 @@ import { Search, Plus } from 'lucide-react'
 import { Card, CardHeader, CardContent } from '@/components/ui/Card'
 import { Badge } from '@/components/ui/Badge'
 import type { UserPageRow } from '@/types/admin-users'
+import type { ProgrammeOption } from '@/services/student-form-queries'
 import { EditUserModal } from './EditUserModal'
+import { EditStudentModal } from './EditStudentModal'
 import { CreateUserModal } from './CreateUserModal'
 
 type Tab = 'students' | 'lecturers'
@@ -13,11 +15,13 @@ type Tab = 'students' | 'lecturers'
 type Props = {
   initialUsers: UserPageRow[]
   currentAdminId: string
+  programmes: ProgrammeOption[]
 }
 
-export function UserTable({ initialUsers, currentAdminId }: Props) {
+export function UserTable({ initialUsers, currentAdminId, programmes }: Props) {
   const [users, setUsers] = useState<UserPageRow[]>(initialUsers)
   const [editTarget, setEditTarget] = useState<UserPageRow | null>(null)
+  const [editStudentTarget, setEditStudentTarget] = useState<UserPageRow | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [tab, setTab] = useState<Tab>('students')
   const [search, setSearch] = useState('')
@@ -68,7 +72,7 @@ export function UserTable({ initialUsers, currentAdminId }: Props) {
 
   function handleEditSuccess(updated: UserPageRow) {
     setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)))
-    // router.refresh() is called inside EditUserModal after onSuccess —
+    // router.refresh() is called inside the modal after onSuccess —
     // it triggers the server re-fetch + snapshot-key remount for server-truth re-sync.
   }
 
@@ -193,7 +197,7 @@ export function UserTable({ initialUsers, currentAdminId }: Props) {
               <StudentsTable
                 rows={filteredStudents}
                 currentAdminId={currentAdminId}
-                onEdit={setEditTarget}
+                onEdit={setEditStudentTarget}
               />
             )}
           </div>
@@ -222,8 +226,16 @@ export function UserTable({ initialUsers, currentAdminId }: Props) {
           onClose={() => setEditTarget(null)}
         />
       )}
+      {editStudentTarget && (
+        <EditStudentModal
+          user={editStudentTarget}
+          onSuccess={handleEditSuccess}
+          onClose={() => setEditStudentTarget(null)}
+        />
+      )}
       {createOpen && (
         <CreateUserModal
+          programmes={programmes}
           onSuccess={handleUserCreated}
           onClose={() => setCreateOpen(false)}
         />
