@@ -48,14 +48,27 @@ export default function LoginPageClient() {
   }
 
   const INPUT =
-    'w-full rounded-lg border border-zinc-200 dark:border-zinc-700 px-3 py-2 text-sm text-[--text-primary] placeholder:text-[--text-muted] focus:outline-none focus:ring-2 focus:ring-[#C1272D] focus:border-transparent'
+    'w-full rounded-lg border px-3 py-2 text-sm placeholder:text-[--text-muted] focus:outline-none focus:ring-2 focus:ring-[#C1272D] focus:border-transparent'
 
-  const INPUT_STYLE: React.CSSProperties = { backgroundColor: 'var(--bg-surface)' }
+  // Inline CSS-var styles: arbitrary `[--token]` Tailwind classes silently fail in
+  // v4, and class-gated `dark:` variants don't fire in system-dark (no `.dark` on
+  // <html>). CSS-var tokens flip via the @media(prefers-color-scheme) fallback.
+  const INPUT_STYLE: React.CSSProperties = {
+    backgroundColor: 'var(--bg-surface)',
+    color: 'var(--text-primary)',
+    borderColor: 'var(--ucsi-border)',
+  }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center gap-8 bg-zinc-50 dark:bg-zinc-950 p-6">
+    <div
+      className="min-h-screen flex flex-col items-center justify-center gap-8 p-6"
+      style={{ backgroundColor: 'var(--bg-base)' }}
+    >
       <div className="flex flex-col items-center gap-3 text-center">
-        <div className="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white px-3 py-2 shadow-sm">
+        <div
+          className="rounded-lg border bg-white px-3 py-2 shadow-sm"
+          style={{ borderColor: 'var(--ucsi-border)' }}
+        >
           <Image
             src="/college-logo.png"
             alt="UCSI College"
@@ -65,18 +78,26 @@ export default function LoginPageClient() {
             priority
           />
         </div>
-        <h1 className="text-xl font-bold text-[--text-primary]">UCSI Student Portal</h1>
-        <p className="text-sm text-[--text-secondary]">Sign in to continue</p>
+        <h1 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>
+          UCSI Student Portal
+        </h1>
+        <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+          Sign in to continue
+        </p>
       </div>
 
       <form
         onSubmit={handleSubmit}
-        className="flex w-full max-w-sm flex-col gap-4 rounded-xl border border-zinc-200 dark:border-zinc-700 p-6 shadow-sm"
+        className="flex w-full max-w-sm flex-col gap-4 rounded-xl border p-6 shadow-sm"
         style={INPUT_STYLE}
         suppressHydrationWarning
       >
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="identifier" className="text-sm font-medium text-[--text-primary]">
+          <label
+            htmlFor="identifier"
+            className="text-sm font-medium"
+            style={{ color: 'var(--text-primary)' }}
+          >
             Student Email / Staff Username
           </label>
           <input
@@ -94,7 +115,11 @@ export default function LoginPageClient() {
         </div>
 
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="password" className="text-sm font-medium text-[--text-primary]">
+          <label
+            htmlFor="password"
+            className="text-sm font-medium"
+            style={{ color: 'var(--text-primary)' }}
+          >
             Password
           </label>
           <input
@@ -126,7 +151,7 @@ export default function LoginPageClient() {
         </button>
       </form>
 
-      <p className="text-xs text-[--text-muted]">
+      <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
         UCSI College — Student Portal
       </p>
     </div>

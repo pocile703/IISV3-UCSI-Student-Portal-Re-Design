@@ -9,6 +9,7 @@ import type { ProgrammeOption } from '@/services/student-form-queries'
 import { EditUserModal } from './EditUserModal'
 import { EditStudentModal } from './EditStudentModal'
 import { CreateUserModal } from './CreateUserModal'
+import { ViewUserModal } from './ViewUserModal'
 
 type Tab = 'students' | 'lecturers'
 
@@ -22,6 +23,7 @@ export function UserTable({ initialUsers, currentAdminId, programmes }: Props) {
   const [users, setUsers] = useState<UserPageRow[]>(initialUsers)
   const [editTarget, setEditTarget] = useState<UserPageRow | null>(null)
   const [editStudentTarget, setEditStudentTarget] = useState<UserPageRow | null>(null)
+  const [viewTarget, setViewTarget] = useState<UserPageRow | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [tab, setTab] = useState<Tab>('students')
   const [search, setSearch] = useState('')
@@ -198,6 +200,7 @@ export function UserTable({ initialUsers, currentAdminId, programmes }: Props) {
                 rows={filteredStudents}
                 currentAdminId={currentAdminId}
                 onEdit={setEditStudentTarget}
+                onView={setViewTarget}
               />
             )}
           </div>
@@ -212,6 +215,7 @@ export function UserTable({ initialUsers, currentAdminId, programmes }: Props) {
                 rows={filteredStaff}
                 currentAdminId={currentAdminId}
                 onEdit={setEditTarget}
+                onView={setViewTarget}
               />
             )}
           </div>
@@ -240,6 +244,9 @@ export function UserTable({ initialUsers, currentAdminId, programmes }: Props) {
           onClose={() => setCreateOpen(false)}
         />
       )}
+      {viewTarget && (
+        <ViewUserModal user={viewTarget} onClose={() => setViewTarget(null)} />
+      )}
     </>
   )
 }
@@ -250,10 +257,12 @@ function StudentsTable({
   rows,
   currentAdminId,
   onEdit,
+  onView,
 }: {
   rows: UserPageRow[]
   currentAdminId: string
   onEdit: (u: UserPageRow) => void
+  onView: (u: UserPageRow) => void
 }) {
   if (rows.length === 0) return <EmptyState />
   return (
@@ -331,6 +340,7 @@ function StudentsTable({
                   user={u}
                   currentAdminId={currentAdminId}
                   onEdit={onEdit}
+                  onView={onView}
                 />
               </td>
             </tr>
@@ -347,10 +357,12 @@ function StaffTable({
   rows,
   currentAdminId,
   onEdit,
+  onView,
 }: {
   rows: UserPageRow[]
   currentAdminId: string
   onEdit: (u: UserPageRow) => void
+  onView: (u: UserPageRow) => void
 }) {
   if (rows.length === 0) return <EmptyState />
   return (
@@ -433,6 +445,7 @@ function StaffTable({
                   user={u}
                   currentAdminId={currentAdminId}
                   onEdit={onEdit}
+                  onView={onView}
                 />
               </td>
             </tr>
@@ -449,10 +462,12 @@ function ActionButtons({
   user,
   currentAdminId,
   onEdit,
+  onView,
 }: {
   user: UserPageRow
   currentAdminId: string
   onEdit: (u: UserPageRow) => void
+  onView: (u: UserPageRow) => void
 }) {
   const isSelf = user.id === currentAdminId
   const name = user.fullName ?? user.emailInstitutional
@@ -461,7 +476,8 @@ function ActionButtons({
       <button
         type="button"
         aria-label={`View ${name}`}
-        className="text-xs font-medium hover:underline"
+        onClick={() => onView(user)}
+        className="cursor-pointer text-xs font-medium hover:underline"
         style={{ color: 'var(--ucsi-red)' }}
       >
         View

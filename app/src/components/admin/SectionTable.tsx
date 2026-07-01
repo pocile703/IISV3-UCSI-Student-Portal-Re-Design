@@ -1,16 +1,18 @@
 'use client'
 
 import { Fragment, useState } from 'react'
-import { Edit2 } from 'lucide-react'
+import { Edit2, Users } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Card, CardContent } from '@/components/ui/Card'
 import { DAY_LABELS } from '@/lib/utils'
 import type { SectionPageRow, SectionFormData, SectionStats } from '@/types/admin-sections'
 import { SectionModal } from './SectionModal'
+import { SectionEnrollmentModal } from './SectionEnrollmentModal'
 
 type ModalState =
   | { mode: 'create' }
   | { mode: 'edit'; section: SectionPageRow }
+  | { mode: 'enroll'; section: SectionPageRow }
   | null
 
 type Props = {
@@ -210,14 +212,26 @@ export function SectionTable({ initialSections, formData, stats }: Props) {
                             </Badge>
                           </td>
                           <td className="px-4 py-3 text-right">
-                            <button
-                              type="button"
-                              onClick={() => setModal({ mode: 'edit', section: row })}
-                              aria-label={`Edit ${row.courseCode} ${row.sectionCode}`}
-                              className="cursor-pointer rounded p-1 text-[--text-secondary] hover:bg-zinc-100 dark:hover:bg-white/10"
-                            >
-                              <Edit2 size={14} />
-                            </button>
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                type="button"
+                                onClick={() => setModal({ mode: 'enroll', section: row })}
+                                aria-label={`Manage students in ${row.courseCode} ${row.sectionCode}`}
+                                title="Manage students"
+                                className="cursor-pointer rounded p-1 text-[--text-secondary] hover:bg-zinc-100 dark:hover:bg-white/10"
+                              >
+                                <Users size={14} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setModal({ mode: 'edit', section: row })}
+                                aria-label={`Edit ${row.courseCode} ${row.sectionCode}`}
+                                title="Edit section"
+                                className="cursor-pointer rounded p-1 text-[--text-secondary] hover:bg-zinc-100 dark:hover:bg-white/10"
+                              >
+                                <Edit2 size={14} />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -230,12 +244,18 @@ export function SectionTable({ initialSections, formData, stats }: Props) {
         </Card>
       </div>
 
-      {/* Modal — rendered outside layout div so it sits above everything */}
-      {modal && (
+      {/* Modals — rendered outside layout div so they sit above everything */}
+      {modal && (modal.mode === 'create' || modal.mode === 'edit') && (
         <SectionModal
           mode={modal.mode}
           section={modal.mode === 'edit' ? modal.section : undefined}
           formData={formData}
+          onClose={() => setModal(null)}
+        />
+      )}
+      {modal?.mode === 'enroll' && (
+        <SectionEnrollmentModal
+          sectionId={modal.section.id}
           onClose={() => setModal(null)}
         />
       )}
